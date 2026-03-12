@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Recommender Pro</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div id="particles-js" class="particles-bg"></div>
+    <header class="header">
+        <div class="container">
+            <h1 class="neon-text">Game Recommender Pro</h1>
+            <p class="subtitle">Discover Your Next Gaming Adventure!</p>
+            <div class="search-bar">
+                <div class="input-group">
+                    <input type="text" id="game-search" class="form-control" placeholder="Search for a game..." autocomplete="off">
+                    <button id="search-btn" class="btn btn-neon"><i class="fas fa-search"></i> Search</button>
+                    <button id="random-btn" class="btn btn-neon ms-2"><i class="fas fa-dice"></i> Random</button>
+                </div>
+                <div id="suggestions" class="suggestions"></div>
+            </div>
+            <div class="stats mt-3">
+                <p>Exploring <span id="game-count">0</span> epic games!</p>
+            </div>
+        </div>
+    </header>
+
+    <section id="popular-section" class="container mt-5">
+        <h2 class="section-title">Popular Games</h2>
+        <div class="row" id="popular-games-list"></div>
+    </section>
+
+    <section id="selected-section" class="container mt-5 d-none">
+        <h2 class="section-title">Your Selected Game</h2>
+        <div id="selected-game" class="text-center"></div>
+    </section>
+
+    <section id="recommendations-section" class="container mt-5 d-none">
+        <h2 class="section-title">Recommended For You</h2>
+        <div class="filter-bar mb-3">
+            <select id="sort-select" class="form-select">
+                <option value="rating">Sort by Rating</option>
+                <option value="reviews">Sort by Reviews</option>
+            </select>
+        </div>
+        <div class="row" id="game-list"></div>
+    </section>
+
+    <div id="loading" class="loading-overlay d-none">
+        <div class="spinner-border text-neon" role="status"></div>
+    </div>
+
+    <button id="back-to-top" class="btn btn-neon"><i class="fas fa-arrow-up"></i></button>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Game Recommender Pro. Built with <i class="fas fa-heart"></i> by xAI.</p>
+        </div>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+    <script>
+        particlesJS('particles-js', {
+            particles: { number: { value: 50, density: { enable: true, value_area: 1000 } },
+                         color: { value: '#00ff00' }, shape: { type: 'circle' },
+                         opacity: { value: 0.4 }, size: { value: 2, random: true },
+                         move: { enable: true, speed: 1, direction: 'none', random: true } },
+            interactivity: { detect_on: 'canvas', events: { onhover: { enable: true, mode: 'repulse' } } }
+        });
+    </script>
+</body>
+</html>
