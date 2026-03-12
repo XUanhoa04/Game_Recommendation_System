@@ -1,4 +1,4 @@
-# Game Recommender Pro
+# Game Recommendation System
 
 A content-based game recommendation system built with a deep autoencoder model, served via a Flask web application.
 
@@ -87,3 +87,4 @@ Open `Colab_Train.ipynb` in Google Colab to retrain the autoencoder on updated d
 Recommendations are filtered by default to games with at least 5,000 total reviews and a minimum 65% positive review ratio to ensure quality results.
 
 ## Screenshots
+<img width="1612" height="914" alt="image" src="https://github.com/user-attachments/assets/2fe62114-a3e9-4952-8f08-324d54ff88a9" />
