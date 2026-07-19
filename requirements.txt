@@ -1,0 +1,15 @@
+# Core app
+flask>=3.0.0,<4
+pandas>=2.0.0,<3
+numpy>=1.24.0,<3
+scikit-learn>=1.3.0,<2
+torch>=2.0.0
+faiss-cpu>=1.7.4
+
+# Optional: online cold-start encode path (/recommend_encode)
+# transformers>=4.36.0
+# tokenizers>=0.15.0
+
+# Dev / eval / tests
+pytest>=7.4.0
+tqdm>=4.66.0

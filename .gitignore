@@ -1,2 +1,42 @@
-data/
-*.csv
+# Data artifacts (large) — keep structure, ignore bulk files by default
+data/*.csv
+data/*.npy
+data/*.pth
+data/*.pkl
+data/*.bin
+data/evaluation_report.json
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Secrets / env
+.env
+.env.*
+
+# Misc
+*.log
+best.pt
+runs/

@@ -1,109 +1,64 @@
-import pandas as pd
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-import pickle
+"""CLI for Game Recommender Pro.
+
+Usage:
+  python cli_recommender.py "Counter-Strike: Global Offensive"
+  python cli_recommender.py "Dota 2" "Team Fortress 2" --k 5
+  python cli_recommender.py "Hades" --genre Action --min-rating 0.7
+"""
+from __future__ import annotations
+
+import argparse
+import json
 import sys
 
-# Đường dẫn data (thay đổi nếu cần)
-DATA_DIR = 'data'
+from utils.recommender import RecommendationEngine
 
-# Load data
-try:
-    df = pd.read_csv(f'{DATA_DIR}/processed_games.csv')
-    latent_reps = np.load(f'{DATA_DIR}/latent_reps.npy')
-    with open(f'{DATA_DIR}/feature_info.pkl', 'rb') as f:
-        feature_info = pickle.load(f)
-except FileNotFoundError:
-    print("Error: Data files not found in 'data/' directory.")
-    sys.exit(1)
 
-# Class RecommendationEngine (copy từ app.py)
-class RecommendationEngine:
-    def __init__(self, df, latent_reps):
-        self.df = df
-        self.latent_reps = latent_reps
-        self.game_index = {name.lower(): idx for idx, name in enumerate(df['Name'])}
-    
-    def recommend(self, game_name, num_recommendations=9, min_reviews=5000, min_rating=0.65):
-        game_name_lower = game_name.lower()
-        
-        if game_name_lower not in self.game_index:
-            return None
-        
-        idx = self.game_index[game_name_lower]
-        
-        similarities = cosine_similarity([self.latent_reps[idx]], self.latent_reps)[0]
-        
-        candidates = []
-        for i, sim in enumerate(similarities):
-            if i == idx:  # Skip game gốc
-                continue
-            
-            game = self.df.iloc[i]
-            total_reviews = game['Total Reviews']
-            positive_ratio = game['Positive'] / max(total_reviews, 1)
-            
-            # Chỉ số quality_score = similarity * 0.7 + positive_ratio * 0.3
-            quality_score = sim * 0.7 + positive_ratio * 0.3
-            
-            candidates.append({
-                'index': i,
-                'similarity': sim,
-                'positive_ratio': positive_ratio,
-                'total_reviews': total_reviews,
-                'quality_score': quality_score
-            })
-        
-        # Filter theo min_reviews và min_rating
-        filtered_candidates = [
-            c for c in candidates 
-            if c['total_reviews'] >= min_reviews and c['positive_ratio'] >= min_rating
-        ]
-        
-        # Sort theo quality_score descending
-        filtered_candidates.sort(key=lambda x: x['quality_score'], reverse=True)
-        
-        top_candidates = filtered_candidates[:num_recommendations]
-        
-        recommendations = []
-        for candidate in top_candidates:
-            game = self.df.iloc[candidate['index']]
-            recommendations.append({
-                'Name': game['Name'],
-                'Header image': game['Header image'],
-                'Short description': game['Short description'],
-                'Genres': game['Genres'],
-                'Movies': game['Movies'] if pd.notna(game['Movies']) else '',
-                'Link Game': game['Link Game'],
-                'Positive': int(game['Positive']),
-                'Total Reviews': int(game['Total Reviews']),
-                'Similarity': float(candidate['similarity']),
-                'Rating': f"{candidate['positive_ratio']*100:.1f}%",
-                'Quality Score': float(candidate['quality_score'])
-            })
-        
-        return recommendations
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Content-based Steam game recommender")
+    parser.add_argument("games", nargs="+", help="One or more seed game names")
+    parser.add_argument("-k", "--num", type=int, default=9, help="Number of recommendations")
+    parser.add_argument("--min-reviews", type=int, default=5000)
+    parser.add_argument("--min-rating", type=float, default=0.65)
+    parser.add_argument("--genre", action="append", dest="genres", default=None)
+    parser.add_argument("--max-price", type=float, default=None)
+    parser.add_argument("--multiplayer", action="store_true")
+    parser.add_argument("--json", action="store_true", help="Print JSON output")
+    parser.add_argument("--no-faiss", action="store_true")
+    args = parser.parse_args(argv)
 
-# Khởi tạo và chạy CLI
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: python cli_recommender.py \"Game Name\"")
-        sys.exit(1)
-    
-    game_name = sys.argv[1]
-    rec_engine = RecommendationEngine(df, latent_reps)
-    recommendations = rec_engine.recommend(game_name)
-    
-    if recommendations is None:
-        print(f"Game '{game_name}' not found.")
-    else:
-        print(f"Recommendations for '{game_name}':")
-        for rec in recommendations:
-            print(f"\nName: {rec['Name']}")
-            print(f"Similarity: {rec['Similarity']:.4f} (độ tương đồng latent vector từ autoencoder)")
-            print(f"Positive Ratio: {rec['positive_ratio']:.4f} (tỷ lệ review positive / total reviews)")
-            print(f"Quality Score: {rec['Quality Score']:.4f} (tính bằng similarity * 0.7 + positive_ratio * 0.3)")
-            print(f"Genres: {rec['Genres']}")
-            print(f"Rating: {rec['Rating']}")
-            print(f"Total Reviews: {rec['Total Reviews']}")
-            print(f"Link: {rec['Link Game']}")
+    engine = RecommendationEngine(use_faiss=not args.no_faiss)
+    recs = engine.recommend(
+        game_names=args.games,
+        num_recommendations=args.num,
+        min_reviews=args.min_reviews,
+        min_rating=args.min_rating,
+        genres=args.genres,
+        max_price=args.max_price,
+        multiplayer_only=args.multiplayer,
+    )
+
+    if recs is None:
+        print(f"Game(s) not found: {args.games}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(recs, indent=2, ensure_ascii=False))
+        return 0
+
+    seeds = ", ".join(args.games)
+    print(f"Recommendations for [{seeds}] ({len(recs)} results):\n")
+    for i, rec in enumerate(recs, 1):
+        print(f"{i}. {rec['Name']}")
+        print(f"   Similarity: {rec['Similarity']:.4f} | Quality: {rec['Quality Score']:.4f}")
+        print(f"   Rating: {rec['Rating']} ({rec['Total Reviews']:,} reviews)")
+        print(f"   Genres: {rec['Genres']}")
+        if rec.get("explanation"):
+            print(f"   Why: {rec['explanation'].get('summary', '')}")
+        print(f"   Link: {rec['Link Game']}")
+        print()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

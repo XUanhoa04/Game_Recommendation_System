@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pandas numpy scikit-learn torch --index-url https://download.pytorch.org/whl/cpu
+          pip install flask faiss-cpu
+
+      - name: Run unit tests
+        run: pytest -q tests/
+
+      - name: Syntax check CLI / app imports
+        run: |
+          python -c "from utils.model import ImprovedAutoencoder; print('model ok')"
+          python -c "from utils.metrics import precision_at_k; print('metrics ok')"
