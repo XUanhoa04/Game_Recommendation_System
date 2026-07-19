@@ -163,7 +163,24 @@ Each result includes `Similarity`, `Quality Score`, and `explanation` (`shared_g
 
 ## Screenshots
 
-<img width="1612" height="914" alt="Game Recommendation System UI" src="https://github.com/user-attachments/assets/2fe62114-a3e9-4952-8f08-324d54ff88a9" />
+### Home — search, filters, popular games
+
+![Homepage with filters and popular games](docs/screenshots/01_home.png)
+
+### Recommendations — match %, explanations, shared tags
+
+Query example: **Hades**
+
+![Recommendations for Hades with quality scores and explanations](docs/screenshots/04_full_results.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Selected game card](docs/screenshots/02_recommendations.png)
+
+![Recommendations mid-scroll](docs/screenshots/03_recommendations_detail.png)
+
+</details>
 
 ---
 
