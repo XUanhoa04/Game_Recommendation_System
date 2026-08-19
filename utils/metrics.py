@@ -9,7 +9,7 @@ from utils.parsing import jaccard
 
 
 def precision_at_k(relevant: Set[int], recommended: Sequence[int], k: int) -> float:
-    if k <= 0:
+    if k <= 0 or not relevant:
         return 0.0
     top = recommended[:k]
     if not top:
@@ -19,9 +19,11 @@ def precision_at_k(relevant: Set[int], recommended: Sequence[int], k: int) -> fl
 
 
 def recall_at_k(relevant: Set[int], recommended: Sequence[int], k: int) -> float:
-    if not relevant:
+    if not relevant or k <= 0:
         return 0.0
     top = recommended[:k]
+    if not top:
+        return 0.0
     hits = sum(1 for i in top if i in relevant)
     return hits / len(relevant)
 
@@ -29,20 +31,27 @@ def recall_at_k(relevant: Set[int], recommended: Sequence[int], k: int) -> float
 def average_precision(relevant: Set[int], recommended: Sequence[int], k: int) -> float:
     if not relevant or k <= 0:
         return 0.0
+    top = recommended[:k]
+    if not top:
+        return 0.0
     hits = 0
     score = 0.0
-    for i, idx in enumerate(recommended[:k], start=1):
+    for i, idx in enumerate(top, start=1):
         if idx in relevant:
             hits += 1
             score += hits / i
-    return score / min(len(relevant), k)
+    denom = min(len(relevant), k)
+    return score / denom if denom > 0 else 0.0
 
 
 def ndcg_at_k(relevant: Set[int], recommended: Sequence[int], k: int) -> float:
     if not relevant or k <= 0:
         return 0.0
+    top = recommended[:k]
+    if not top:
+        return 0.0
     dcg = 0.0
-    for i, idx in enumerate(recommended[:k], start=1):
+    for i, idx in enumerate(top, start=1):
         if idx in relevant:
             dcg += 1.0 / np.log2(i + 1)
     ideal_hits = min(len(relevant), k)
@@ -67,7 +76,10 @@ def intra_list_diversity(tag_sets: Sequence[Set[str]]) -> float:
 def catalog_coverage(all_recommended: Iterable[int], catalog_size: int) -> float:
     if catalog_size <= 0:
         return 0.0
-    return len(set(all_recommended)) / catalog_size
+    unique_items = set(all_recommended)
+    if not unique_items:
+        return 0.0
+    return min(1.0, len(unique_items) / catalog_size)
 
 
 def build_proxy_relevant(
@@ -79,11 +91,20 @@ def build_proxy_relevant(
     top_n_by_tag: int = 50,
 ) -> Set[int]:
     """Proxy ground-truth: games with high tag/genre overlap (excluding self)."""
+    if query_idx < 0 or query_idx >= len(tag_sets) or query_idx >= len(genre_sets):
+        return set()
+    if top_n_by_tag <= 0:
+        return set()
+
     q_tags = tag_sets[query_idx]
     q_genres = genre_sets[query_idx]
-    scored: List[tuple] = []
+    if not q_tags and not q_genres:
+        return set()
 
-    for i in range(len(tag_sets)):
+    scored: List[tuple] = []
+    num_items = min(len(tag_sets), len(genre_sets))
+
+    for i in range(num_items):
         if i == query_idx:
             continue
         tj = jaccard(q_tags, tag_sets[i])

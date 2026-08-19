@@ -44,3 +44,35 @@ def test_proxy_relevant():
     rel = build_proxy_relevant(0, genre_sets, tag_sets, min_tag_jaccard=0.2, min_genre_jaccard=0.5)
     assert 1 in rel
     assert 2 not in rel or 1 in rel
+
+
+def test_metrics_edge_cases():
+    # Empty inputs
+    assert precision_at_k(set(), [1, 2], 5) == 0.0
+    assert precision_at_k({1, 2}, [], 5) == 0.0
+    assert precision_at_k({1, 2}, [1, 2], 0) == 0.0
+    assert precision_at_k({1, 2}, [1, 2], -1) == 0.0
+
+    assert recall_at_k(set(), [1, 2], 5) == 0.0
+    assert recall_at_k({1, 2}, [], 5) == 0.0
+    assert recall_at_k({1, 2}, [1, 2], 0) == 0.0
+
+    assert average_precision(set(), [1, 2], 5) == 0.0
+    assert average_precision({1, 2}, [], 5) == 0.0
+    assert average_precision({1, 2}, [1, 2], 0) == 0.0
+
+    assert ndcg_at_k(set(), [1, 2], 5) == 0.0
+    assert ndcg_at_k({1, 2}, [], 5) == 0.0
+    assert ndcg_at_k({1, 2}, [1, 2], 0) == 0.0
+
+    assert intra_list_diversity([]) == 0.0
+    assert intra_list_diversity([{"a"}]) == 0.0
+
+    assert catalog_coverage([], 100) == 0.0
+    assert catalog_coverage([1, 2], 0) == 0.0
+
+    # Proxy relevant out of bounds
+    assert build_proxy_relevant(-1, [{"Action"}], [{"Tag"}]) == set()
+    assert build_proxy_relevant(5, [{"Action"}], [{"Tag"}]) == set()
+    assert build_proxy_relevant(0, [{"Action"}], [{"Tag"}], top_n_by_tag=0) == set()
+    assert build_proxy_relevant(0, [set()], [set()]) == set()
