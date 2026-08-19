@@ -257,7 +257,7 @@ $(document).ready(function() {
                             <img src="${game['Header image']}" alt="${escapeHtml(game.Name)}" class="game-img lazy" loading="lazy">
                             ${hasVideo ? `
                                 <div class="video-container">
-                                    <video class="trailer-video" muted loop preload="none">
+                                    <video class="trailer-video" muted loop playsinline preload="none">
                                         <source src="${String(game.Movies).split(',')[0]}" type="video/mp4">
                                     </video>
                                 </div>
@@ -297,7 +297,11 @@ $(document).ready(function() {
                     }
                 );
             }
-            $card.find('.game-card').click(() => window.open(game['Link Game'], '_blank'));
+            $card.find('.game-card').click(function(e) {
+                if (game['Link Game']) {
+                    window.open(game['Link Game'], '_blank', 'noopener,noreferrer');
+                }
+            });
             $('#game-list').append($card);
         });
     }
