@@ -27,8 +27,10 @@ jobs:
       - name: Run unit tests
         run: pytest -q tests/
 
-      - name: Syntax check CLI / app imports
+      - name: Verify CLI and imports
         run: |
+          python cli_recommender.py --help
+          python cli_recommender.py --genres --no-faiss
           python -c "from utils.model import ImprovedAutoencoder; print('model ok')"
           python -c "from utils.metrics import precision_at_k; print('metrics ok')"
           python -c "from app import app; print('app ok')"
