@@ -139,11 +139,34 @@ def test_latent_vector_query(engine: RecommendationEngine):
 def test_search_and_popular(engine: RecommendationEngine):
     hits = engine.search("shoot", limit=5)
     assert any("Shooter" in h["Name"] or "FPS" in h["Name"] or "Alpha" in h["Name"] for h in hits)
+    assert engine.search("", limit=5) == []
+    assert engine.search("shoot", limit=0) == []
+    
+    # Exact match should be first
+    exact_hits = engine.search("Alpha Shooter", limit=5)
+    assert len(exact_hits) > 0
+    assert exact_hits[0]["Name"] == "Alpha Shooter"
+
     popular = engine.get_popular_games(3)
     assert len(popular) == 3
     info = engine.get_game_info("Cozy Farm")
     assert info is not None
     assert info["Name"] == "Cozy Farm"
+
+
+def test_latent_vector_validation(engine: RecommendationEngine):
+    with pytest.raises(ValueError, match="Expected latent dim"):
+        engine.recommend(latent_vector=np.zeros(5, dtype=np.float32))
+
+    nan_vec = np.zeros(engine.dim, dtype=np.float32)
+    nan_vec[0] = np.nan
+    with pytest.raises(ValueError, match="NaN or Inf"):
+        engine.recommend(latent_vector=nan_vec)
+
+
+def test_empty_seeds_error(engine: RecommendationEngine):
+    with pytest.raises(ValueError):
+        engine.recommend(indices=[])
 
 
 def test_row_count_mismatch():

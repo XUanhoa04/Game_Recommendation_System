@@ -152,10 +152,12 @@ class RecommendationEngine:
             vec = np.asarray(latent_vector, dtype=np.float32).reshape(-1)
             if vec.shape[0] != self.dim:
                 raise ValueError(f"Expected latent dim {self.dim}, got {vec.shape[0]}")
+            if not np.all(np.isfinite(vec)):
+                raise ValueError("Latent vector contains NaN or Inf values")
             return _l2_normalize(vec.reshape(1, -1))[0], seed_indices
 
         if indices is not None:
-            seed_indices = list(indices)
+            seed_indices = [int(i) for i in indices if 0 <= int(i) < len(self.df)]
         elif game_names is not None:
             for name in game_names:
                 idx = self.resolve_name(name)
@@ -166,7 +168,7 @@ class RecommendationEngine:
             raise ValueError("Provide game_names, indices, or latent_vector")
 
         if not seed_indices:
-            raise ValueError("No seed games provided")
+            raise ValueError("No valid seed games provided")
 
         # Average raw latents then re-normalize (standard multi-seed fusion)
         mean_vec = self.latent_raw[seed_indices].mean(axis=0, keepdims=True)
@@ -200,10 +202,11 @@ class RecommendationEngine:
         if filters.multiplayer_only and not self.is_multiplayer[idx]:
             return False
         if filters.genres:
-            wanted = {g.lower() for g in filters.genres}
-            game_genres = {g.lower() for g in self.genre_lists[idx]}
-            if not wanted.intersection(game_genres):
-                return False
+            wanted = {str(g).strip().lower() for g in filters.genres if str(g).strip()}
+            if wanted:
+                game_genres = {g.lower() for g in self.genre_lists[idx]}
+                if not wanted.intersection(game_genres):
+                    return False
         return True
 
     def _explain(
@@ -212,12 +215,21 @@ class RecommendationEngine:
         candidate_idx: int,
         similarity: float,
     ) -> Dict[str, Any]:
+        if not seed_indices:
+            return {
+                "shared_genres": [],
+                "shared_tags": [],
+                "reasons": [f"Similarity: {similarity:.3f}"],
+                "summary": f"Similarity: {similarity:.3f}",
+            }
+
         # Aggregate seed tags/genres for multi-seed
         seed_genres: Set[str] = set()
         seed_tags: Set[str] = set()
         for s in seed_indices:
-            seed_genres |= self.genre_sets[s]
-            seed_tags |= self.tag_sets[s]
+            if 0 <= s < len(self.genre_sets):
+                seed_genres |= self.genre_sets[s]
+                seed_tags |= self.tag_sets[s]
 
         shared_genres = top_overlap(seed_genres, self.genre_sets[candidate_idx], limit=6)
         shared_tags = top_overlap(seed_tags, self.tag_sets[candidate_idx], limit=8)
@@ -429,7 +441,12 @@ class RecommendationEngine:
         return results
 
     def random_game(self, top_n: int = 1000) -> Dict[str, Any]:
-        order = np.argsort(-self.total_reviews)[: min(top_n, len(self.df))]
+        if len(self.df) == 0:
+            return {"Name": "", "Header image": "", "Link Game": ""}
+        pool_size = max(1, min(top_n, len(self.df)))
+        order = np.argsort(-self.total_reviews)[:pool_size]
+        if len(order) == 0:
+            return {"Name": "", "Header image": "", "Link Game": ""}
         idx = int(np.random.choice(order))
         game = self.df.iloc[idx]
         return {
@@ -440,17 +457,35 @@ class RecommendationEngine:
 
     def search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         q = query.lower().strip()
-        if not q:
+        if not q or limit <= 0:
             return []
-        matches = []
-        # Prefer prefix matches
-        for name in self.names:
+
+        matches: List[Tuple[int, float, str]] = []
+        seen_names: Set[str] = set()
+
+        for idx, name in enumerate(self.names):
             lower = name.lower()
-            if q in lower:
-                matches.append((0 if lower.startswith(q) else 1, name))
-        matches.sort(key=lambda x: (x[0], x[1].lower()))
+            if lower in seen_names:
+                continue
+
+            if lower == q:
+                tier = 0  # Exact match
+            elif lower.startswith(q):
+                tier = 1  # Prefix match
+            elif f" {q}" in lower or f":{q}" in lower or f"-{q}" in lower:
+                tier = 2  # Word boundary match
+            elif q in lower:
+                tier = 3  # Substring match
+            else:
+                continue
+
+            seen_names.add(lower)
+            pop = float(self.popularity[idx]) if idx < len(self.popularity) else 0.0
+            matches.append((tier, -pop, name))
+
+        matches.sort(key=lambda x: (x[0], x[1], x[2].lower()))
         results = []
-        for _, name in matches[:limit]:
+        for _, _, name in matches[:limit]:
             idx = self.game_index[name.lower()]
             game = self.df.iloc[idx]
             results.append(
