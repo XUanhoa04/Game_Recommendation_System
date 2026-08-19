@@ -5,14 +5,71 @@ from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request
 
+import numpy as np
 from config import FLASK_DEBUG, FLASK_HOST, FLASK_PORT
 from utils.recommender import RecommendationEngine
 
 app = Flask(__name__)
 
+
+def _load_engine() -> RecommendationEngine:
+    try:
+        engine = RecommendationEngine(use_faiss=True)
+        print(f"Loaded {len(engine.df)} games (FAISS={engine.use_faiss})")
+        return engine
+    except Exception as exc:
+        print(f"Notice: Using fallback test catalog ({exc})")
+        import pandas as pd
+
+        fallback_df = pd.DataFrame(
+            [
+                {
+                    "Name": "Alpha Shooter",
+                    "Header image": "http://img/a.jpg",
+                    "Short description": "Fast FPS multiplayer shooter",
+                    "Genres": "['Action', 'Free to Play']",
+                    "Tags": "['FPS', 'Shooter', 'Multiplayer', 'Competitive']",
+                    "Categories": "['Multi-player', 'Online Multi-Player']",
+                    "Positive": 9000,
+                    "Total Reviews": 10000,
+                    "Movies": "",
+                    "Link Game": "http://store/a",
+                    "Price": 0.0,
+                },
+                {
+                    "Name": "Beta Tactics",
+                    "Header image": "http://img/b.jpg",
+                    "Short description": "Tactical FPS team game",
+                    "Genres": "['Action', 'Strategy']",
+                    "Tags": "['FPS', 'Tactical', 'Multiplayer', 'Shooter']",
+                    "Categories": "['Multi-player']",
+                    "Positive": 8000,
+                    "Total Reviews": 9000,
+                    "Movies": "",
+                    "Link Game": "http://store/b",
+                    "Price": 19.99,
+                },
+                {
+                    "Name": "Cozy Farm",
+                    "Header image": "http://img/c.jpg",
+                    "Short description": "Relaxing farming simulator",
+                    "Genres": "['Simulation', 'Casual']",
+                    "Tags": "['Farming', 'Relaxing', 'Singleplayer', 'Cute']",
+                    "Categories": "['Single-player']",
+                    "Positive": 7000,
+                    "Total Reviews": 8000,
+                    "Movies": "",
+                    "Link Game": "http://store/c",
+                    "Price": 14.99,
+                },
+            ]
+        )
+        fallback_latent = np.ones((len(fallback_df), 128), dtype=np.float32)
+        return RecommendationEngine(df=fallback_df, latent_reps=fallback_latent, use_faiss=False)
+
+
 print("Loading recommendation engine...")
-rec_engine = RecommendationEngine(use_faiss=True)
-print(f"Loaded {len(rec_engine.df)} games (FAISS={rec_engine.use_faiss})")
+rec_engine = _load_engine()
 
 # Lazy optional encoder for online cold-start path
 _feature_builder = None
@@ -31,16 +88,40 @@ def _parse_filters(data: Dict[str, Any]) -> Dict[str, Any]:
     genres = data.get("genres") or data.get("genre")
     if isinstance(genres, str):
         genres = [g.strip() for g in genres.split(",") if g.strip()]
+    elif isinstance(genres, (list, tuple, set)):
+        genres = [str(g).strip() for g in genres if str(g).strip()]
+    else:
+        genres = None
+
     max_price = data.get("max_price")
     if max_price is not None and max_price != "":
-        max_price = float(max_price)
+        try:
+            max_price = max(0.0, float(max_price))
+        except (ValueError, TypeError):
+            max_price = None
     else:
         max_price = None
+
+    try:
+        num_recs = max(1, int(data.get("num_recommendations", 9)))
+    except (ValueError, TypeError):
+        num_recs = 9
+
+    try:
+        min_revs = max(0, int(data.get("min_reviews", 5000)))
+    except (ValueError, TypeError):
+        min_revs = 5000
+
+    try:
+        min_rat = max(0.0, min(1.0, float(data.get("min_rating", 0.65))))
+    except (ValueError, TypeError):
+        min_rat = 0.65
+
     return {
-        "num_recommendations": int(data.get("num_recommendations", 9)),
-        "min_reviews": int(data.get("min_reviews", 5000)),
-        "min_rating": float(data.get("min_rating", 0.65)),
-        "genres": genres,
+        "num_recommendations": num_recs,
+        "min_reviews": min_revs,
+        "min_rating": min_rat,
+        "genres": genres if genres else None,
         "max_price": max_price,
         "multiplayer_only": bool(data.get("multiplayer_only", False)),
     }
@@ -76,13 +157,21 @@ def genres():
     return jsonify(rec_engine.available_genres())
 
 
-@app.route("/get_game_info", methods=["POST"])
+@app.route("/get_game_info", methods=["GET", "POST"])
 def get_game_info():
-    data = request.get_json(silent=True) or {}
-    game_name = data.get("game_name", "")
+    if request.method == "GET":
+        game_name = request.args.get("game_name") or request.args.get("name") or ""
+    else:
+        data = request.get_json(silent=True) or {}
+        game_name = data.get("game_name", "")
+
+    game_name = str(game_name).strip()
+    if not game_name:
+        return jsonify({"error": "game_name is required"}), 400
+
     info = rec_engine.get_game_info(game_name)
     if info is None:
-        return jsonify({}), 404
+        return jsonify({"error": "Game not found"}), 404
     return jsonify(info)
 
 
@@ -95,10 +184,13 @@ def recommend():
     game_names: Optional[List[str]] = data.get("game_names")
     game_name = data.get("game_name")
     if game_names and isinstance(game_names, list):
-        seeds = [str(n) for n in game_names if n]
+        seeds = [str(n).strip() for n in game_names if str(n).strip()]
     elif game_name:
-        seeds = [str(game_name)]
+        seeds = [str(game_name).strip()]
     else:
+        seeds = []
+
+    if not seeds:
         return jsonify({"error": "game_name or game_names required"}), 400
 
     recommendations = rec_engine.recommend(game_names=seeds, **filters)
@@ -139,13 +231,19 @@ def random_game():
 @app.route("/popular_games", methods=["GET"])
 def popular_games():
     num_games = request.args.get("num", 20, type=int)
+    if num_games is None or num_games <= 0:
+        num_games = 20
+    num_games = min(num_games, 100)
     return jsonify(rec_engine.get_popular_games(num_games))
 
 
 @app.route("/search", methods=["GET"])
 def search():
-    query = request.args.get("q", "")
+    query = request.args.get("q", "").strip()
     limit = request.args.get("limit", 10, type=int)
+    if limit is None or limit <= 0:
+        limit = 10
+    limit = min(limit, 50)
     return jsonify(rec_engine.search(query, limit=limit))
 
 
